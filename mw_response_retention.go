@@ -1,4 +1,4 @@
-// based on echo middleware BodyDump https://github.com/labstack/echo/blob/master/middleware/body_dump.go
+// based on echo middleware ResponseRetention https://github.com/labstack/echo/blob/master/middleware/body_dump.go
 package main
 
 import (
@@ -13,51 +13,38 @@ import (
 )
 
 type (
-	// BodyDumpConfig defines the config for BodyDump middleware.
-	BodyDumpConfig struct {
+	// ResponseRetentionConfig defines the config for ResponseRetention middleware.
+	ResponseRetentionConfig struct {
 		// Skipper defines a function to skip middleware.
 		Skipper middleware.Skipper
-
-		// Handler receives request and response payload.
-		// Required.
-		Handler BodyDumpHandler
 	}
 
-	// BodyDumpHandler receives the request and response payload.
-	BodyDumpHandler func(echo.Context, []byte, []byte)
-
-	bodyDumpResponseWriter struct {
+	responseRetainer struct {
 		io.Writer
 		http.ResponseWriter
 	}
 )
 
 var (
-	// DefaultBodyDumpConfig is the default BodyDump middleware config.
-	DefaultBodyDumpConfig = BodyDumpConfig{
+	// DefaultResponseRetentionConfig is the default ResponseRetention middleware config.
+	DefaultResponseRetentionConfig = ResponseRetentionConfig{
 		Skipper: middleware.DefaultSkipper,
 	}
 )
 
-// BodyDump returns a BodyDump middleware.
-//
-// BodyDump middleware captures the request and response payload and calls the
-// registered handler.
-func BodyDump(handler BodyDumpHandler) echo.MiddlewareFunc {
-	c := DefaultBodyDumpConfig
-	c.Handler = handler
-	return BodyDumpWithConfig(c)
+// ResponseRetention returns a ResponseRetention middleware.
+func ResponseRetention() echo.MiddlewareFunc {
+	c := DefaultResponseRetentionConfig
+
+	return ResponseRetentionWithConfig(c)
 }
 
-// BodyDumpWithConfig returns a BodyDump middleware with config.
-// See: `BodyDump()`.
-func BodyDumpWithConfig(config BodyDumpConfig) echo.MiddlewareFunc {
+// ResponseRetentionWithConfig returns a ResponseRetention middleware with config.
+// See: `ResponseRetention()`.
+func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.MiddlewareFunc {
 	// Defaults
-	if config.Handler == nil {
-		panic("echo: body-dump middleware requires a handler function")
-	}
 	if config.Skipper == nil {
-		config.Skipper = DefaultBodyDumpConfig.Skipper
+		config.Skipper = DefaultResponseRetentionConfig.Skipper
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -66,43 +53,36 @@ func BodyDumpWithConfig(config BodyDumpConfig) echo.MiddlewareFunc {
 				return next(c)
 			}
 
-			// Request
-			reqBody := []byte{}
-			if c.Request().Body != nil { // Read
-				reqBody, _ = io.ReadAll(c.Request().Body)
-			}
-			c.Request().Body = io.NopCloser(bytes.NewBuffer(reqBody)) // Reset
+			// req := c.Request()
+			// res := c.Response()
 
-			// Response
+			// see https://github.com/labstack/echo/blob/master/middleware/body_dump.go#L76
 			resBody := new(bytes.Buffer)
 			mw := io.MultiWriter(c.Response().Writer, resBody)
-			writer := &bodyDumpResponseWriter{Writer: mw, ResponseWriter: c.Response().Writer}
+			writer := &responseRetainer{Writer: mw, ResponseWriter: c.Response().Writer}
 			c.Response().Writer = writer
 
 			if err = next(c); err != nil {
 				c.Error(err)
 			}
 
-			// Callback
-			config.Handler(c, reqBody, resBody.Bytes())
-
-			return
+			return nil
 		}
 	}
 }
 
-func (w *bodyDumpResponseWriter) WriteHeader(code int) {
+func (w *responseRetainer) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-func (w *bodyDumpResponseWriter) Write(b []byte) (int, error) {
+func (w *responseRetainer) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func (w *bodyDumpResponseWriter) Flush() {
+func (w *responseRetainer) Flush() {
 	w.ResponseWriter.(http.Flusher).Flush()
 }
 
-func (w *bodyDumpResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+func (w *responseRetainer) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return w.ResponseWriter.(http.Hijacker).Hijack()
 }
