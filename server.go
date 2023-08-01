@@ -32,9 +32,11 @@ func main() {
 		Format: `${path} -- ${time_rfc3339} -- latency: ${latency_human}` + "\n",
 	}))
 
+	// add requestID to response headers before response storage
+	e.Use(middleware.RequestID())
+
 	// ResponseStorage implementation using sync.Map underneath
 	respStorage := &RespStorage{}
-
 	e.Use(ResponseRetentionWithConfig(ResponseRetentionConfig{
 		ResponseStorage: respStorage,
 	}))

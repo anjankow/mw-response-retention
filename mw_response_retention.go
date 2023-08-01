@@ -67,7 +67,7 @@ func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.Middleware
 			}
 
 			req := c.Request()
-			// res := c.Response()
+			res := c.Response()
 
 			// see https://github.com/labstack/echo/blob/master/middleware/body_dump.go#L76
 			resBody := new(bytes.Buffer)
@@ -80,7 +80,21 @@ func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.Middleware
 			}
 
 			key, err := makeCacheKey(req)
-			fmt.Println("cache key: " + key)
+			if err != nil {
+				fmt.Println(err)
+				return nil
+			}
+
+			rresp := RetainedResponse{
+				Body:       resBody.Bytes(),
+				Header:     res.Header().Clone(),
+				StatusCode: res.Status,
+			}
+
+			fmt.Println("retained response: ", string(rresp.Body), rresp.Header, rresp.StatusCode)
+			if err := config.ResponseStorage.Store(req.Context(), key, rresp); err != nil {
+				fmt.Println("Failed to store response: ", err)
+			}
 
 			return nil
 		}
