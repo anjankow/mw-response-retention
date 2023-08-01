@@ -4,6 +4,8 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -17,34 +19,42 @@ type (
 	ResponseRetentionConfig struct {
 		// Skipper defines a function to skip middleware.
 		Skipper middleware.Skipper
+
+		// ResponseStorage provides Store and Retrieve from cache functionality
+		ResponseStorage
 	}
 
+	// responseRetainer is used to access response bytes
 	responseRetainer struct {
 		io.Writer
 		http.ResponseWriter
 	}
-)
 
-var (
-	// DefaultResponseRetentionConfig is the default ResponseRetention middleware config.
-	DefaultResponseRetentionConfig = ResponseRetentionConfig{
-		Skipper: middleware.DefaultSkipper,
+	ResponseStorage interface {
+		Store(ctx context.Context, key string, response RetainedResponse) error
+		Retrieve(ctx context.Context, key string) (RetainedResponse, error)
+	}
+
+	RetainedResponse struct {
+		Body       []byte
+		Header     http.Header
+		StatusCode int
 	}
 )
 
-// ResponseRetention returns a ResponseRetention middleware.
-func ResponseRetention() echo.MiddlewareFunc {
-	c := DefaultResponseRetentionConfig
-
-	return ResponseRetentionWithConfig(c)
-}
+var (
+	ErrNotRetained = errors.New("response is not in cache")
+)
 
 // ResponseRetentionWithConfig returns a ResponseRetention middleware with config.
-// See: `ResponseRetention()`.
 func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.MiddlewareFunc {
 	// Defaults
 	if config.Skipper == nil {
-		config.Skipper = DefaultResponseRetentionConfig.Skipper
+		config.Skipper = middleware.DefaultSkipper
+	}
+
+	if config.ResponseStorage == nil {
+		panic("ResponseStorage implementation is missing")
 	}
 
 	return func(next echo.HandlerFunc) echo.HandlerFunc {

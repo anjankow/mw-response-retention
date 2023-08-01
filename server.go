@@ -32,5 +32,12 @@ func main() {
 		Format: `${path} -- ${time_rfc3339} -- latency: ${latency_human}` + "\n",
 	}))
 
+	// ResponseStorage implementation using sync.Map underneath
+	respStorage := &RespStorage{}
+
+	e.Use(ResponseRetentionWithConfig(ResponseRetentionConfig{
+		ResponseStorage: respStorage,
+	}))
+
 	e.Logger.Fatal(e.Start(":1323"))
 }
