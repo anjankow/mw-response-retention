@@ -46,7 +46,8 @@ type (
 )
 
 var (
-	ErrNotRetained = errors.New("response is not in cache")
+	ErrNotRetained  = errors.New("response is not in cache")
+	ErrWriteFailure = errors.New("failed to write the response")
 )
 
 // ResponseRetentionWithConfig returns a ResponseRetention middleware with config.
@@ -68,6 +69,12 @@ func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.Middleware
 
 			req := c.Request()
 			res := c.Response()
+
+			if rresp, err := tryRetrieve(c, config.ResponseStorage); err == nil {
+				// we found the cached response!
+				fmt.Println("using retrieved response: ", rresp.Header.Get(echo.HeaderXRequestID))
+				return writeResponse(c, rresp)
+			} // else call the next() handler and store the response
 
 			// see https://github.com/labstack/echo/blob/master/middleware/body_dump.go#L76
 			resBody := new(bytes.Buffer)
@@ -102,6 +109,8 @@ func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.Middleware
 }
 
 func makeCacheKey(req *http.Request) (string, error) {
+	// TODO: remove requestID and other unique per request values from headers
+
 	var reqData = struct {
 		URL     string      // assures that response is linked to a specific path
 		Method  string      // assures that method will match
@@ -123,6 +132,48 @@ func makeCacheKey(req *http.Request) (string, error) {
 	// sha256 hash
 	reqKey := fmt.Sprintf("%x", h.Sum(nil))
 	return reqKey, nil
+}
+
+func tryRetrieve(c echo.Context, cache ResponseStorage) (RetainedResponse, error) {
+	req := c.Request()
+	key, err := makeCacheKey(req)
+	if err != nil {
+		return RetainedResponse{}, err
+	}
+
+	// Retrieve the cached response using the key
+	return cache.Retrieve(req.Context(), key)
+}
+
+func writeResponse(c echo.Context, rresp RetainedResponse) error {
+	res := c.Response()
+	if len(rresp.Body) > 0 {
+		// We will first write the body and only then the header code,
+		// if write has been successful.
+		// Using echo.Response Write() will implicitly set status to OK,
+		// see https://github.com/labstack/echo/blob/master/response.go#L50.
+		writer := res.Unwrap() // Unwrapped response writer to avoid implicit WriteHeader.
+
+		n, err := writer.Write(rresp.Body)
+		if err != nil || n != len(rresp.Body) {
+			return ErrWriteFailure
+		}
+
+		// Normally done by echo.Response Write()
+		res.Size += int64(n)
+	}
+
+	// set retrieved headers
+	for key, values := range rresp.Header {
+		res.Header().Del(key)
+		for _, value := range values {
+			res.Header().Add(key, value)
+		}
+	}
+	// all set, we can commit the response
+	res.WriteHeader(rresp.StatusCode)
+
+	return nil
 }
 
 func (w *responseRetainer) WriteHeader(code int) {
