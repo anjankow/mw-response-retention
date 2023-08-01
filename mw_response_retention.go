@@ -5,7 +5,10 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -63,7 +66,7 @@ func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.Middleware
 				return next(c)
 			}
 
-			// req := c.Request()
+			req := c.Request()
 			// res := c.Response()
 
 			// see https://github.com/labstack/echo/blob/master/middleware/body_dump.go#L76
@@ -76,9 +79,36 @@ func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.Middleware
 				c.Error(err)
 			}
 
+			key, err := makeCacheKey(req)
+			fmt.Println("cache key: " + key)
+
 			return nil
 		}
 	}
+}
+
+func makeCacheKey(req *http.Request) (string, error) {
+	var reqData = struct {
+		URL     string      // assures that response is linked to a specific path
+		Method  string      // assures that method will match
+		Headers http.Header // enriched with auth token assures that only the initial requestor can access it
+	}{
+		URL:     req.URL.String(),
+		Method:  req.Method,
+		Headers: req.Header.Clone(),
+	}
+
+	// your algorithm of choice
+	h := sha256.New()
+	// reqData will be encoded to json and written to h
+	e := json.NewEncoder(h)
+	if err := e.Encode(reqData); err != nil {
+		return "", fmt.Errorf("failed to encode reqData: %w", err)
+	}
+
+	// sha256 hash
+	reqKey := fmt.Sprintf("%x", h.Sum(nil))
+	return reqKey, nil
 }
 
 func (w *responseRetainer) WriteHeader(code int) {
