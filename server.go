@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func getFish(c echo.Context) error {
@@ -26,6 +27,10 @@ func main() {
 	// routing
 	e.GET("/api/animals/fish", getFish)
 	e.GET("/api/animals/birds", getBirds)
+
+	e.Use(middleware.LoggerWithConfig(middleware.LoggerConfig{
+		Format: `${path} -- ${time_rfc3339} -- latency: ${latency_human}` + "\n",
+	}))
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
