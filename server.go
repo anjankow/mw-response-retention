@@ -5,12 +5,14 @@ import (
 	"mw-response-retainer/mw"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
 
 func getFish(c echo.Context) error {
+	time.Sleep(2 * time.Second)
 	query := c.Request().URL.Query()
 	if weird := query.Get("weird"); weird == "true" {
 		// weird fish requested, there you go!
@@ -21,6 +23,7 @@ func getFish(c echo.Context) error {
 }
 
 func getBirds(c echo.Context) error {
+	time.Sleep(2 * time.Second)
 	return c.String(http.StatusOK, "owls (are not what they seem)")
 }
 
