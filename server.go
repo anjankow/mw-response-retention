@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"mw-response-retainer/mw"
 	"net/http"
+	"sync"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -37,9 +40,27 @@ func main() {
 
 	// ResponseStorage implementation using sync.Map underneath
 	respStorage := &RespStorage{}
-	e.Use(ResponseRetentionWithConfig(ResponseRetentionConfig{
+	e.Use(mw.ResponseRetentionWithConfig(mw.ResponseRetentionConfig{
 		ResponseStorage: respStorage,
 	}))
 
 	e.Logger.Fatal(e.Start(":1323"))
+}
+
+type RespStorage struct {
+	storage sync.Map
+}
+
+func (s *RespStorage) Store(ctx context.Context, key string, response mw.RetainedResponse) error {
+	s.storage.Store(key, response)
+	return nil
+}
+
+func (s *RespStorage) Retrieve(ctx context.Context, key string) (mw.RetainedResponse, error) {
+	resp, ok := s.storage.Load(key)
+	if !ok {
+		return mw.RetainedResponse{}, mw.ErrNotRetained
+	}
+
+	return resp.(mw.RetainedResponse), nil
 }

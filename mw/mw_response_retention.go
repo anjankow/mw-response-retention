@@ -1,5 +1,5 @@
 // based on echo middleware ResponseRetention https://github.com/labstack/echo/blob/master/middleware/body_dump.go
-package main
+package mw
 
 import (
 	"bufio"
