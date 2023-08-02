@@ -147,21 +147,6 @@ func tryRetrieve(c echo.Context, cache ResponseStorage) (RetainedResponse, error
 
 func writeResponse(c echo.Context, rresp RetainedResponse) error {
 	res := c.Response()
-	if len(rresp.Body) > 0 {
-		// We will first write the body and only then the header code,
-		// if write has been successful.
-		// Using echo.Response Write() will implicitly set status to OK,
-		// see https://github.com/labstack/echo/blob/master/response.go#L50.
-		writer := res.Unwrap() // Unwrapped response writer to avoid implicit WriteHeader.
-
-		n, err := writer.Write(rresp.Body)
-		if err != nil || n != len(rresp.Body) {
-			return ErrWriteFailure
-		}
-
-		// Normally done by echo.Response Write()
-		res.Size += int64(n)
-	}
 
 	// set retrieved headers
 	for key, values := range rresp.Header {
@@ -170,8 +155,19 @@ func writeResponse(c echo.Context, rresp RetainedResponse) error {
 			res.Header().Add(key, value)
 		}
 	}
-	// all set, we can commit the response
-	res.WriteHeader(rresp.StatusCode)
+
+	if len(rresp.Body) > 0 {
+
+		// The first call to Write will trigger an implicit
+		// WriteHeader(http.StatusOK), see https://github.com/labstack/echo/blob/master/response.go#L50.
+		n, err := res.Write(rresp.Body)
+		if err != nil || n != len(rresp.Body) {
+			return ErrWriteFailure
+		}
+	} else {
+		// In case of no body, write the retained status code.
+		res.WriteHeader(rresp.StatusCode)
+	}
 
 	return nil
 }
