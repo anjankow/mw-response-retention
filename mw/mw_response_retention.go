@@ -1,4 +1,4 @@
-// based on echo middleware ResponseRetention https://github.com/labstack/echo/blob/master/middleware/body_dump.go
+// based on echo middleware BodyDump https://github.com/labstack/echo/blob/master/middleware/body_dump.go
 package mw
 
 import (
@@ -98,7 +98,7 @@ func ResponseRetentionWithConfig(config ResponseRetentionConfig) echo.Middleware
 				StatusCode: res.Status,
 			}
 
-			fmt.Println("retained response: ", string(rresp.Body), rresp.Header, rresp.StatusCode)
+			fmt.Println("storing the response : ", rresp.Header.Get(echo.HeaderXRequestID))
 			if err := config.ResponseStorage.Store(req.Context(), key, rresp); err != nil {
 				fmt.Println("Failed to store response: ", err)
 			}
